@@ -1,0 +1,21 @@
+server:
+  port: 8080
+
+dify:
+  base-url: ${DIFY_BASE_URL}
+  api-key: ${DIFY_API_KEY}
+
+baidu:
+  speech:
+    api-key: ${BAIDU_API_KEY}
+    secret-key: ${BAIDU_SECRET_KEY}
+
+spring:
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+cors:
+  allowed-origins: http://localhost:5173
