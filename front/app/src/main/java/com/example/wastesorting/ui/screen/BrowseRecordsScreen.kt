@@ -44,10 +44,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.wastesorting.data.db.GarbageDatabase
+import com.example.wastesorting.data.db.entity.CaptureRecordEntity
 import com.example.wastesorting.ui.theme.HazardousColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -138,8 +140,26 @@ fun BrowseRecordsScreen(onBack: () -> Unit, onRecordClick: (Long) -> Unit) {
                                 }
                                 Column(modifier = Modifier.weight(1f)) {
                                     if (record.isRecognized) {
-                                        Text("${record.itemName}", fontWeight = FontWeight.Medium, fontSize = 16.sp)
-                                        Text(record.categoryName ?: "", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        if (record.aiResultJson != null) {
+                                            // AI 多分类结果
+                                            val items = try {
+                                                val arr = JSONObject(record.aiResultJson).getJSONArray("items")
+                                                (0 until arr.length()).map { i ->
+                                                    val obj = arr.getJSONObject(i)
+                                                    obj.optString("item_name", "") to obj.optString("category", "")
+                                                }
+                                            } catch (_: Exception) { emptyList() }
+                                            items.take(2).forEach { (name, cat) ->
+                                                Text("${name}  ·  $cat", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                            }
+                                            if (items.size > 2) {
+                                                Text("+${items.size - 2} 件更多", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                        } else {
+                                            // 简单模式单分类结果
+                                            Text("${record.itemName}", fontWeight = FontWeight.Medium, fontSize = 16.sp)
+                                            Text(record.categoryName ?: "", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
                                     } else {
                                         Text("未识别", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }

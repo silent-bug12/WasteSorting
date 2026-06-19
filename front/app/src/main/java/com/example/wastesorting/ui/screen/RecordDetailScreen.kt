@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -51,6 +53,7 @@ import com.example.wastesorting.util.catColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -91,7 +94,10 @@ fun RecordDetailScreen(recordId: Long, onBack: () -> Unit) {
     }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
             Row(modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
                 Text("记录详情", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -114,18 +120,43 @@ fun RecordDetailScreen(recordId: Long, onBack: () -> Unit) {
                 if (r.isRecognized) {
                     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                         Column(modifier = Modifier.padding(20.dp)) {
-                            Text("识别结果", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if (r.aiResultJson != null) "AI 识别结果" else "识别结果", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text(r.itemName ?: "", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val cat = r.categoryName ?: ""
-                                Box(modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(catColor(cat)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                                    Text(cat, color = Color.White, fontSize = 13.sp)
+                            if (r.aiResultJson != null) {
+                                // AI 多分类结果
+                                val items = try {
+                                    val arr = JSONObject(r.aiResultJson).getJSONArray("items")
+                                    (0 until arr.length()).map { i ->
+                                        val obj = arr.getJSONObject(i)
+                                        Triple(obj.optString("item_name", ""), obj.optString("category", ""), obj.optString("disposal_tip", ""))
+                                    }
+                                } catch (_: Exception) { emptyList() }
+                                items.forEach { (name, cat, tip) ->
+                                    Text(name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(catColor(cat)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                                            Text(cat, color = Color.White, fontSize = 13.sp)
+                                        }
+                                    }
+                                    if (tip.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text("💡 $tip", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Spacer(modifier = Modifier.height(12.dp))
                                 }
-                                if (r.confidence != null) {
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text("置信度 ${"%.1f".format(r.confidence * 100)}%", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else {
+                                Text(r.itemName ?: "", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val cat = r.categoryName ?: ""
+                                    Box(modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(catColor(cat)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                                        Text(cat, color = Color.White, fontSize = 13.sp)
+                                    }
+                                    if (r.confidence != null) {
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text("置信度 ${"%.1f".format(r.confidence * 100)}%", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))

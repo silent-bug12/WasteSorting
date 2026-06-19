@@ -49,7 +49,7 @@ public class BaiduTextToSpeechService {
 
         MediaType mediaType = MediaType.parse("application/x-www-form-urlencoded");
         String params = String.format(
-                "tok=%s&cuid=%s&ctp=1&lan=zh&spd=5&pit=5&vol=5&per=20101&aue=3&tex=%s",
+                "tok=%s&cuid=%s&ctp=1&lan=zh&spd=5&pit=5&vol=5&per=4&aue=3&tex=%s",
                 token,
                 cuid,
                 java.net.URLEncoder.encode(text, "UTF-8")

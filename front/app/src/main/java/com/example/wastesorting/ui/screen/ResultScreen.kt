@@ -44,8 +44,59 @@ import com.example.wastesorting.util.catColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * 获取各分类的简单投放建议
+ */
+fun getDisposalTip(classId: Int): String = when (classId) {
+    // 其他垃圾 (0-5)
+    0 -> "沥干食物残渣后投入其他垃圾桶"
+    1 -> "已污染的塑料不可回收，投入其他垃圾桶"
+    2 -> "确保烟蒂完全熄灭后投放"
+    3 -> "直接投入其他垃圾桶即可"
+    4 -> "用纸包裹碎片，避免扎伤清洁人员"
+    5 -> "直接投入其他垃圾桶"
+    // 厨余垃圾 (6-13)
+    6 -> "沥干水分后投入厨余垃圾桶"
+    7 -> "敲碎或掰小后再投放，便于处理"
+    8 -> "直接投入厨余垃圾桶"
+    9 -> "直接投入厨余垃圾桶"
+    10 -> "沥干后投放，建议用滤网收集"
+    11 -> "直接投入厨余垃圾桶"
+    12 -> "直接投入厨余垃圾桶"
+    13 -> "直接投入厨余垃圾桶"
+    // 可回收物 (14-36)
+    14 -> "建议投放至专门回收点，勿混入其他垃圾"
+    15 -> "清空内部物品后投入可回收物桶"
+    16 -> "清洗干净、晾干后投放"
+    17 -> "直接投入可回收物桶"
+    18 -> "冲洗干净后投放效果更佳"
+    19 -> "直接投入可回收物桶"
+    20 -> "撕掉胶带和面单后折叠投放"
+    21 -> "可直接投入可回收物桶"
+    22 -> "建议投入社区旧衣回收箱"
+    23 -> "压扁后投放，节省空间"
+    24 -> "拆解后，布料和填充物分别投放"
+    25 -> "直接投入可回收物桶"
+    26 -> "冲洗干净、拧紧瓶盖后投放"
+    27 -> "用纸包好，防止破碎伤人"
+    28 -> "直接投入可回收物桶"
+    29 -> "直接投入可回收物桶"
+    30 -> "压平折叠后投放，减少体积"
+    31 -> "倒空内容物、冲洗后投放"
+    32 -> "冲洗晾干后投放"
+    33 -> "清洗后压扁，减少占用空间"
+    34 -> "直接投入可回收物桶"
+    35 -> "倒空余油后投入可回收物桶"
+    36 -> "压扁后拧紧瓶盖投放"
+    // 有害垃圾 (37-39)
+    37 -> "投入有害垃圾桶，切勿混入其他垃圾"
+    38 -> "挤空内容物后投入有害垃圾桶"
+    39 -> "整盒投入有害垃圾桶，勿拆包装"
+    else -> "请根据当地分类指南投放"
+}
+
 @Composable
-fun ResultScreen(bitmap: Bitmap, recordId: Long, showAiSuggestion: Boolean = true, onBack: () -> Unit) {
+fun ResultScreen(bitmap: Bitmap, recordId: Long, onBack: () -> Unit) {
     val context = LocalContext.current
     val db = remember { GarbageDatabase.getInstance(context) }
     val classifier = remember { GarbageClassifier.getInstance(context) }
@@ -94,25 +145,27 @@ fun ResultScreen(bitmap: Bitmap, recordId: Long, showAiSuggestion: Boolean = tru
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text("置信度 ${"%.1f".format(r.confidence * 100)}%", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                            Spacer(modifier = Modifier.height(14.dp))
+                            // 投放建议
+                            Box(
+                                modifier = Modifier.fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(catColor(r.category).copy(alpha = 0.1f))
+                                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.Top) {
+                                    Text("💡", fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = getDisposalTip(r.classId),
+                                        fontSize = 14.sp,
+                                        color = catColor(r.category),
+                                        lineHeight = 20.sp
+                                    )
+                                }
+                            }
                         } else {
                             Text("识别失败", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (showAiSuggestion) {
-                Card(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
-                ) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("AI 建议", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text("智能投放建议将在此展示", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                         }
                     }
                 }

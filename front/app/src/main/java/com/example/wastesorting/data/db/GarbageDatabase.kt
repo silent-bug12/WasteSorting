@@ -18,7 +18,7 @@ import org.json.JSONObject
         GarbageItem::class,
         CaptureRecordEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class GarbageDatabase : RoomDatabase() {

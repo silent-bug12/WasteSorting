@@ -8,7 +8,7 @@ sealed class Screen {
     object Statistics : Screen()
     object SimpleCamera : Screen()
     data class SimpleResult(val bitmap: Bitmap, val recordId: Long) : Screen()
-    data class Result(val bitmap: Bitmap, val recordId: Long, val showAiSuggestion: Boolean = true) : Screen()
+    data class Result(val bitmap: Bitmap, val recordId: Long) : Screen()
     data class RecordDetail(val recordId: Long) : Screen()
     object AiMode : Screen()
 }

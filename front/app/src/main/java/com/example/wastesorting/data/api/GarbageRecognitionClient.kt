@@ -33,7 +33,7 @@ object GarbageRecognitionClient {
      * - 真机测试（本地服务器）：http://192.168.x.x:端口（替换为实际 IP）
      * - 云服务器部署：http://your-public-ip-or-domain:端口
      */
-    var baseUrl: String = "http://192.168.0.100:8080"
+    var baseUrl: String = "http://10.68.159.147:8081"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)

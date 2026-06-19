@@ -44,12 +44,17 @@ public class DifyController {
         try {
             String query = request.get("query");
             String user = request.get("user");
-            String fileUrl = request.get("fileUrl");
+            String conversationId = request.get("conversation_id");
             
-            String response = difyService.sendChatMessage(query, user, fileUrl);
+            String response = difyService.sendChatMessage(query, user, null, conversationId);
+            
+            // 从 SSE 响应中提取 conversation_id
+            String extractedConvId = extractConversationId(response, conversationId);
+            
             Map<String, Object> result = new HashMap<>();
             result.put("success", true);
             result.put("response", response);
+            result.put("conversation_id", extractedConvId);
             return ResponseEntity.ok(result);
         } catch (IOException e) {
             log.error("Chat message failed", e);
@@ -64,15 +69,20 @@ public class DifyController {
     public ResponseEntity<Map<String, Object>> uploadAndChat(
             @RequestParam("file") MultipartFile file,
             @RequestParam("user") String user,
-            @RequestParam("query") String query) {
+            @RequestParam("query") String query,
+            @RequestParam(value = "conversation_id", required = false) String conversationId) {
         try {
             String fileUrl = difyService.uploadFile(file, user);
-            String chatResponse = difyService.sendChatMessage(query, user, fileUrl);
+            String chatResponse = difyService.sendChatMessage(query, user, fileUrl, conversationId);
+            
+            // 从 SSE 响应中提取 conversation_id
+            String extractedConvId = extractConversationId(chatResponse, conversationId);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("fileUrl", fileUrl);
             response.put("chatResponse", chatResponse);
+            response.put("conversation_id", extractedConvId);
             return ResponseEntity.ok(response);
         } catch (IOException e) {
             log.error("Upload and chat failed", e);
@@ -81,5 +91,30 @@ public class DifyController {
             response.put("error", e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
+    }
+
+    /**
+     * 从 Dify SSE 响应中提取 conversation_id
+     */
+    private String extractConversationId(String responseBody, String fallback) {
+        try {
+            // SSE 格式: data: {"event":"message","conversation_id":"xxx",...}
+            for (String line : responseBody.split("\n")) {
+                if (line.startsWith("data: ")) {
+                    String json = line.substring(6).trim();
+                    if (json.startsWith("{")) {
+                        com.fasterxml.jackson.databind.ObjectMapper mapper =
+                                new com.fasterxml.jackson.databind.ObjectMapper();
+                        com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(json);
+                        if (node.has("conversation_id") && !node.get("conversation_id").asText().isEmpty()) {
+                            return node.get("conversation_id").asText();
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to extract conversation_id from response", e);
+        }
+        return fallback;
     }
 }
