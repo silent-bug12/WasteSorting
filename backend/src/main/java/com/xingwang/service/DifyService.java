@@ -62,7 +62,7 @@ public class DifyService {
         }
     }
 
-    public String sendChatMessage(String query, String user, String fileId) throws IOException {
+    public String sendChatMessage(String query, String user, String fileId, String conversationId) throws IOException {
         String url = difyBaseUrl + "/v1/chat-messages";
         
         try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
@@ -74,7 +74,7 @@ public class DifyService {
             body.put("inputs", new HashMap<>());
             body.put("query", query);
             body.put("response_mode", "streaming");
-            body.put("conversation_id", "");
+            body.put("conversation_id", conversationId != null ? conversationId : "");
             body.put("user", user);
             
             if (fileId != null && !fileId.isEmpty()) {

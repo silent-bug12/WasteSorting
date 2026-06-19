@@ -45,6 +45,7 @@ import com.example.wastesorting.data.db.dao.CategoryStat
 import com.example.wastesorting.util.catColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.time.LocalDate
 import java.time.DayOfWeek
 import java.time.ZoneId
@@ -62,8 +63,28 @@ fun StatisticsScreen(onBack: () -> Unit) {
             .atStartOfDay(ZoneId.systemDefault())
             .toInstant()
             .toEpochMilli()
-        stats = withContext(Dispatchers.IO) { db.captureRecordDao().getCategoryStats() }
-        weeklyStats = withContext(Dispatchers.IO) { db.captureRecordDao().getWeeklyStats(weekStart) }
+        val allRecords = withContext(Dispatchers.IO) { db.captureRecordDao().getAll() }
+        // 统计：从 categoryName（简单模式）和 aiResultJson（AI 模式）中合并计数
+        val allStats = mutableMapOf<String, Int>()
+        val weeklyStatsMap = mutableMapOf<String, Int>()
+        for (rec in allRecords) {
+            if (!rec.isRecognized) continue
+            if (rec.aiResultJson != null) {
+                try {
+                    val arr = JSONObject(rec.aiResultJson).getJSONArray("items")
+                    for (i in 0 until arr.length()) {
+                        val cat = arr.getJSONObject(i).optString("category", "其他垃圾")
+                        allStats[cat] = (allStats[cat] ?: 0) + 1
+                        if (rec.timestamp >= weekStart) weeklyStatsMap[cat] = (weeklyStatsMap[cat] ?: 0) + 1
+                    }
+                } catch (_: Exception) {}
+            } else if (rec.categoryName != null) {
+                allStats[rec.categoryName!!] = (allStats[rec.categoryName!!] ?: 0) + 1
+                if (rec.timestamp >= weekStart) weeklyStatsMap[rec.categoryName!!] = (weeklyStatsMap[rec.categoryName!!] ?: 0) + 1
+            }
+        }
+        stats = allStats.map { CategoryStat(it.key, it.value) }
+        weeklyStats = weeklyStatsMap.map { CategoryStat(it.key, it.value) }
     }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->

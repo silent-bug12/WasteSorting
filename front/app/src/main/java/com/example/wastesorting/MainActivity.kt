@@ -46,16 +46,16 @@ fun AppRoot() {
             onNavigateToResult = { bmp, id -> navTo(Screen.SimpleResult(bmp, id)) }
         )
         is Screen.SimpleResult -> ResultScreen(
-            bitmap = screen.bitmap, recordId = screen.recordId, showAiSuggestion = false,
+            bitmap = screen.bitmap, recordId = screen.recordId,
             onBack = { navTo(Screen.Main) }
         )
         is Screen.AiMode -> AiModeScreen(
             onBack = { navTo(Screen.Main) },
-            onNavigateToResult = { bmp, id -> navTo(Screen.Result(bmp, id, showAiSuggestion = true)) }
+            onNavigateToResult = { bmp, id -> navTo(Screen.Result(bmp, id)) }
         )
         is Screen.Result -> ResultScreen(
-            bitmap = screen.bitmap, recordId = screen.recordId, showAiSuggestion = screen.showAiSuggestion,
-            onBack = { navTo(if (screen.showAiSuggestion) Screen.AiMode else Screen.Main) }
+            bitmap = screen.bitmap, recordId = screen.recordId,
+            onBack = { navTo(Screen.AiMode) }
         )
         is Screen.BrowseRecords -> BrowseRecordsScreen(
             onBack = { navTo(Screen.Main) },

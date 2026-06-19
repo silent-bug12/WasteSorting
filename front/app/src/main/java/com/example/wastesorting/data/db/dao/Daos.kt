@@ -66,6 +66,9 @@ interface CaptureRecordDao {
            "confidence = :confidence, isRecognized = 1 WHERE id = :id")
     suspend fun updateRecognition(id: Long, itemName: String, categoryName: String, confidence: Float)
 
+    @Query("UPDATE capture_records SET aiResultJson = :json, isRecognized = 1 WHERE id = :id")
+    suspend fun updateAiResult(id: Long, json: String)
+
     @Query("DELETE FROM capture_records WHERE id = :id")
     suspend fun deleteById(id: Long)
 

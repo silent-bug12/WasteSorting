@@ -47,5 +47,6 @@ data class CaptureRecordEntity(
     val categoryName: String?,
     val confidence: Float?,
     val isRecognized: Boolean,
-    val timestamp: Long
+    val timestamp: Long,
+    val aiResultJson: String? = null   // AI 多分类结果 JSON（{items: [{item_name, category, disposal_tip}]}）
 )

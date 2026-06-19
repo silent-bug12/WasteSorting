@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,9 +69,11 @@ fun SimpleCameraScreen(
         }
     }
 
-    // 检查权限
-    if (!hasCameraPermission) {
-        permissionLauncher.launch(Manifest.permission.CAMERA)
+    // 检查权限（仅在首次进入时触发，避免重组时重复调用导致闪退）
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
 
     val takePhoto: () -> Unit = {

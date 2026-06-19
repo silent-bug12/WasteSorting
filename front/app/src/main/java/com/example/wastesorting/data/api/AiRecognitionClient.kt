@@ -17,6 +17,14 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
+ * AI 对话结果
+ */
+data class AiChatResult(
+    val text: String,
+    val conversationId: String?
+)
+
+/**
  * AI 识别 HTTP 客户端
  *
  * 对接后端 Dify 服务，实现图片分析、语音转文字、文字转语音。
@@ -33,11 +41,11 @@ object AiRecognitionClient {
 
     /**
      * 后端服务地址，根据部署环境修改此处：
-     * - 模拟器测试：http://10.0.2.2:8080
-     * - 真机测试（本地服务器）：http://192.168.x.x:8080（替换为实际 IP）
-     * - 云服务器部署：http://your-public-ip-or-domain:8080
+     * - 模拟器测试：http://10.0.2.2:8081
+     * - 真机测试（本地服务器）：http://192.168.x.x:8081（替换为实际 IP）
+     * - 云服务器部署：http://your-public-ip-or-domain:8081
      */
-    var baseUrl: String = "http://192.168.0.100:8080"
+    var baseUrl: String = "http://10.68.159.147:8081"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -49,29 +57,34 @@ object AiRecognitionClient {
      * 上传图片并调用 AI 对话分析
      *
      * @param bitmap 输入图片
-     * @param query 用户查询文字（如"这是什么垃圾？"）
-     * @return AI 分析文本
+     * @param query 用户查询文字
+     * @param conversationId 已有会话 ID（首次为 null）
+     * @return AiChatResult（包含文本和 conversationId）
      */
-    suspend fun uploadAndChat(bitmap: Bitmap, query: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun uploadAndChat(bitmap: Bitmap, query: String, conversationId: String? = null): Result<AiChatResult> = withContext(Dispatchers.IO) {
         try {
+            val resizedBitmap = resizeBitmap(bitmap, 1024)
             val stream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.PNG, 90, stream)
+            resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 70, stream)
             val imageBytes = stream.toByteArray()
+            stream.close()
 
-            val requestBody = MultipartBody.Builder()
+            Log.d(TAG, "图片压缩后大小: ${imageBytes.size / 1024}KB")
+
+            val builder = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
-                .addFormDataPart(
-                    "file",
-                    "photo.png",
-                    imageBytes.toRequestBody("image/png".toMediaType())
-                )
+                .addFormDataPart("file", "photo.jpg", imageBytes.toRequestBody("image/jpeg".toMediaType()))
                 .addFormDataPart("user", "android-user")
                 .addFormDataPart("query", query.ifEmpty { "分析这张图片" })
-                .build()
+
+            // conversation_id 为空时也会有值，让后端也能区分
+            if (!conversationId.isNullOrEmpty()) {
+                builder.addFormDataPart("conversation_id", conversationId)
+            }
 
             val request = Request.Builder()
                 .url("$baseUrl/api/dify/upload-and-chat")
-                .post(requestBody)
+                .post(builder.build())
                 .build()
 
             val response = client.newCall(request).execute()
@@ -81,12 +94,11 @@ object AiRecognitionClient {
 
             val bodyString = response.body?.string() ?: ""
             Log.d(TAG, "原始响应长度: ${bodyString.length}")
-            Log.d(TAG, "原始响应前500字符: ${bodyString.take(500)}")
 
-            val answer = extractAnswerFromResponse(bodyString)
-            Log.d(TAG, "提取结果: $answer")
+            val result = extractChatResult(bodyString)
+            Log.d(TAG, "提取结果: text=${result.text.take(100)}, convId=${result.conversationId}")
 
-            Result.success(answer)
+            Result.success(result)
         } catch (e: java.net.ConnectException) {
             Log.e(TAG, "无法连接 AI 服务", e)
             Result.failure(IOException("无法连接 AI 服务，请确认服务已启动"))
@@ -95,6 +107,40 @@ object AiRecognitionClient {
             Result.failure(IOException("AI 服务响应超时，请重试"))
         } catch (e: Exception) {
             Log.e(TAG, "上传分析失败", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 纯文本继续对话（不传图片）
+     *
+     * @param query 用户问题
+     * @param conversationId 会话 ID
+     * @return AiChatResult
+     */
+    suspend fun sendChat(query: String, conversationId: String): Result<AiChatResult> = withContext(Dispatchers.IO) {
+        try {
+            val jsonBody = JSONObject().apply {
+                put("query", query)
+                put("user", "android-user")
+                put("conversation_id", conversationId)
+            }.toString()
+
+            val request = Request.Builder()
+                .url("$baseUrl/api/dify/chat")
+                .post(jsonBody.toRequestBody("application/json".toMediaType()))
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(IOException("对话服务返回错误: ${response.code}"))
+            }
+
+            val bodyString = response.body?.string() ?: ""
+            val result = extractChatResult(bodyString)
+            Result.success(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "对话发送失败", e)
             Result.failure(e)
         }
     }
@@ -171,76 +217,91 @@ object AiRecognitionClient {
     /**
      * 解析 SSE 流式响应，提取 agent_message 中的 answer
      */
-    private fun extractAnswerFromResponse(response: String): String {
-        val answers = mutableListOf<String>()
-        
-        // 检查是否是 JSON 格式（包含 chatResponse 字段）
-        var sseContent = response
+    /**
+     * 等比例缩小图片，使最长边不超过 maxSize
+     */
+    private fun resizeBitmap(bitmap: Bitmap, maxSize: Int): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        val maxDimension = maxOf(width, height)
+        if (maxDimension <= maxSize) return bitmap
+        val ratio = maxSize.toFloat() / maxDimension
+        val newWidth = (width * ratio).toInt()
+        val newHeight = (height * ratio).toInt()
+        return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+    }
+
+    private fun extractChatResult(response: String): AiChatResult {
+        var convId: String? = null
+        var answer = ""
+
+        // 先解析外层 JSON（后端返回的包装）
         try {
-            val json = JSONObject(response)
-            if (json.has("chatResponse")) {
-                sseContent = json.getString("chatResponse")
-                Log.d(TAG, "从 JSON 中提取 chatResponse 字段")
-            } else if (json.has("answer")) {
-                // 直接是普通 JSON 响应
-                val directAnswer = json.getString("answer")
-                if (directAnswer.isNotEmpty()) {
-                    return directAnswer
-                }
+            val outerJson = JSONObject(response)
+            if (outerJson.has("conversation_id")) {
+                val cid = outerJson.optString("conversation_id", "")
+                if (cid.isNotEmpty()) convId = cid
             }
-        } catch (e: Exception) {
-            // 不是 JSON 格式，使用原始内容
-            Log.d(TAG, "响应不是 JSON 格式，使用原始内容")
+            if (outerJson.has("chatResponse")) {
+                // 从 chatResponse 中解析 SSE 流
+                val (a, c) = parseSseAnswer(outerJson.getString("chatResponse"), convId)
+                answer = a
+                if (convId.isNullOrEmpty()) convId = c
+            } else if (outerJson.has("response")) {
+                val (a, c) = parseSseAnswer(outerJson.getString("response"), convId)
+                answer = a
+                if (convId.isNullOrEmpty()) convId = c
+            } else if (outerJson.has("answer")) {
+                answer = outerJson.getString("answer")
+            }
+        } catch (_: Exception) {
+            // 不是 JSON 包装，直接作为 SSE 解析
+            val (a, c) = parseSseAnswer(response, null)
+            answer = a
+            if (convId.isNullOrEmpty()) convId = c
         }
 
+        return AiChatResult(answer, convId)
+    }
+
+    /**
+     * 解析 SSE 流式响应，提取所有 agent_message 的 answer
+     */
+    private fun parseSseAnswer(sseContent: String, existingConvId: String?): Pair<String, String?> {
+        val answers = mutableListOf<String>()
+        var convId = existingConvId
         val lines = sseContent.split("\n", "\r\n")
-        Log.d(TAG, "解析 SSE 响应，共 ${lines.size} 行")
 
         for ((index, line) in lines.withIndex()) {
             val trimmedLine = line.trim()
             if (trimmedLine.startsWith("data:")) {
+                val dataStr = trimmedLine.substring(5).trim()
+                if (dataStr == "[DONE]") continue
                 try {
-                    val dataStr = trimmedLine.substring(5).trim()
-                    Log.d(TAG, "第 $index 行 data: ${dataStr.take(100)}...")
-
-                    if (dataStr == "[DONE]") {
-                        Log.d(TAG, "收到 [DONE] 标记")
-                        continue
-                    }
-
                     val json = JSONObject(dataStr)
                     val event = json.optString("event")
-                    Log.d(TAG, "事件类型: $event")
-
-                    if (event == "agent_message") {
+                    if (event == "agent_message" || event == "message") {
                         val answer = json.optString("answer", "")
-                        Log.d(TAG, "agent_message answer: $answer")
-                        if (answer.isNotEmpty()) {
-                            answers.add(answer)
+                        if (answer.isNotEmpty()) answers.add(answer)
+                        // 提取 conversation_id
+                        if (convId.isNullOrEmpty()) {
+                            val cid = json.optString("conversation_id", "")
+                            if (cid.isNotEmpty()) convId = cid
                         }
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "解析第 $index 行失败: ${e.message}")
-                }
+                } catch (_: Exception) {}
             } else if (trimmedLine.isNotEmpty() && !trimmedLine.startsWith("event:")) {
-                // 尝试直接解析整行（可能是纯 JSON 响应）
                 try {
                     val json = JSONObject(trimmedLine)
                     if (json.has("answer")) {
-                        val answer = json.getString("answer")
-                        if (answer.isNotEmpty()) {
-                            answers.add(answer)
-                        }
+                        val a = json.getString("answer")
+                        if (a.isNotEmpty()) answers.add(a)
                     }
-                } catch (_: Exception) {
-                    // 不是 JSON，忽略
-                }
+                } catch (_: Exception) {}
             }
         }
 
-        val result = answers.joinToString("")
-        Log.d(TAG, "提取结果长度: ${result.length}")
-        return result
+        return answers.joinToString("") to convId
     }
 
     private const val TAG = "AiRecognitionClient"
